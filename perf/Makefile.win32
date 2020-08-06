@@ -2,7 +2,10 @@ top_srcdir = ..
 include $(top_srcdir)/build/Makefile.win32.common
 include $(top_srcdir)/perf/Makefile.sources
 
-CFLAGS += -I$(top_srcdir)/boilerplate -I$(top_srcdir)/util/cairo-script/
+CFLAGS += \
+	-I$(top_srcdir)/boilerplate	\
+	-I$(top_srcdir)/util/cairo-missing	\
+	-I$(top_srcdir)/util/cairo-script
 
 PERF_LIBS = \
 	  $(CFG)/libcairoperf.lib	\

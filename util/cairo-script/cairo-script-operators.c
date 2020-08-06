@@ -32,7 +32,9 @@
  *	Chris Wilson <chris@chris-wilson.co.uk>
  */
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 /* TODO real path type */
 
