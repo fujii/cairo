@@ -44,6 +44,8 @@
 #include "cairo-surface-clipper-private.h"
 #include "cairo-surface-private.h"
 
+CAIRO_BEGIN_DECLS
+
 #ifndef SHADEBLENDCAPS
 #define SHADEBLENDCAPS 120
 #endif
@@ -245,4 +247,22 @@ _cairo_win32_scaled_font_is_type1 (cairo_scaled_font_t *scaled_font);
 cairo_bool_t
 _cairo_win32_scaled_font_is_bitmap (cairo_scaled_font_t *scaled_font);
 
+BYTE _cairo_win32_get_system_text_quality (void);
+
+#ifdef CAIRO_HAS_DWRITE_FONT
+
+cairo_int_status_t
+_cairo_dwrite_show_glyphs_on_surface(void			*surface,
+				     cairo_operator_t		 op,
+				     const cairo_pattern_t	*source,
+				     cairo_glyph_t		*glyphs,
+				     int			 num_glyphs,
+				     cairo_scaled_font_t	*scaled_font);
+
+cairo_int_status_t
+_cairo_dwrite_scaled_font_create_win32_scaled_font(cairo_scaled_font_t *scaled_font,
+                                                   cairo_scaled_font_t **new_font);
+
+#endif /* CAIRO_HAS_DWRITE_FONT */
+CAIRO_END_DECLS
 #endif /* CAIRO_WIN32_PRIVATE_H */

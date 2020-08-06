@@ -6,7 +6,7 @@ SOURCES = $(enabled_cairo_sources)
 
 STATIC_SOURCES = cairo-system.c
 
-OBJECTS = $(patsubst %.c, $(CFG)/%.obj, $(SOURCES))
+OBJECTS = $(patsubst %.cpp, $(CFG)/%.cpp.obj, $(patsubst %.c, $(CFG)/%.c.obj, $(SOURCES)))
 OBJECTS_STATIC = $(patsubst %cairo-system.obj, %cairo-system-static.obj, $(OBJECTS))
 
 static: inform $(CFG)/cairo-static.lib

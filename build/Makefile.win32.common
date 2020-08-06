@@ -29,7 +29,7 @@ endif
 PIXMAN_CFLAGS := -I$(PIXMAN_PATH)/pixman/
 PIXMAN_LIBS := $(PIXMAN_PATH)/pixman/$(CFG)/pixman-1.lib
 
-CAIRO_LIBS =  gdi32.lib msimg32.lib user32.lib
+CAIRO_LIBS =  gdi32.lib msimg32.lib user32.lib advapi32.lib ole32.lib
 
 ifeq ($(CAIRO_HAS_PNG_FUNCTIONS),1)
 ifeq ($(LIBPNG_PATH),)
@@ -62,7 +62,12 @@ CAIRO_ARFLAGS = $(DEFAULT_ARFLAGS) $(LDFLAGS)
 
 # Some generic rules
 
-$(CFG)/%.obj: %.c $(top_srcdir)/src/cairo-features.h
+
+$(CFG)/%.c.obj: %.c $(top_srcdir)/src/cairo-features.h
+	@mkdir -p $(CFG)/`dirname $<`
+	@$(CC) $(CAIRO_CFLAGS) -c -Fo"$@" $<
+
+$(CFG)/%.cpp.obj: %.cpp $(top_srcdir)/src/cairo-features.h
 	@mkdir -p $(CFG)/`dirname $<`
 	@$(CC) $(CAIRO_CFLAGS) -c -Fo"$@" $<
 

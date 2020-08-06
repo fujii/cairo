@@ -111,7 +111,11 @@ cairo_test_NaN (void)
 
 #define CAIRO_TEST_LOG_SUFFIX ".log"
 
+#if CAIRO_HAS_WIN32_FONT
+#define CAIRO_TEST_FONT_FAMILY "Lucida"
+#else
 #define CAIRO_TEST_FONT_FAMILY "DejaVu"
+#endif
 
 /* What is a fail and what isn't?
  * When running the test suite we want to detect unexpected output. This

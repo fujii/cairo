@@ -60,6 +60,8 @@
 #include <crtdbg.h>
 #endif
 
+#include <objbase.h>
+
 typedef struct _cairo_test_list {
     const cairo_test_t *test;
     struct _cairo_test_list *next;
@@ -710,6 +712,7 @@ main (int argc, char **argv)
     _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
 #endif
+    CoInitialize(NULL);
 
     _cairo_test_runner_register_tests ();
     tests = _list_reverse (tests);

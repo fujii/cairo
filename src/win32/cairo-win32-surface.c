@@ -235,6 +235,11 @@ _cairo_win32_surface_emit_glyphs (cairo_win32_surface_t *dst,
     int logical_x, logical_y;
     unsigned int glyph_index_option;
 
+#ifdef CAIRO_HAS_DWRITE_FONT
+    if (scaled_font->backend->type == CAIRO_FONT_TYPE_DWRITE)
+        return _cairo_dwrite_show_glyphs_on_surface(dst, CAIRO_OPERATOR_SOURCE, source, glyphs, num_glyphs, scaled_font);
+#endif
+
     /* We can only handle win32 fonts */
     assert (cairo_scaled_font_get_type (scaled_font) == CAIRO_FONT_TYPE_WIN32);
 
