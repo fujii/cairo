@@ -112,8 +112,14 @@ cairo_win32_scaled_font_get_device_to_logical (cairo_scaled_font_t *scaled_font,
 /*
  * Win32 DirectWrite font support
  */
+
+struct IDWriteFontFace;
+
 cairo_public cairo_font_face_t *
-cairo_dwrite_font_face_create_for_dwrite_fontface(void *dwrite_font, void *dwrite_font_face);
+cairo_dwrite_font_face_create_for_dwrite_font_face(struct IDWriteFontFace *dwrite_font_face);
+
+cairo_public cairo_font_face_t *
+cairo_dwrite_font_face_create_for_hfont (HFONT font);
 
 void
 cairo_dwrite_scaled_font_allow_manual_show_glyphs(cairo_scaled_font_t *dwrite_scaled_font, cairo_bool_t allowed);
@@ -131,10 +137,6 @@ int
 cairo_dwrite_get_cleartype_rendering_mode();
 
 #endif /* CAIRO_HAS_DWRITE_FONT */
-
-struct IDirect3DSurface9;
-cairo_public cairo_surface_t *
-cairo_win32_surface_create_with_d3dsurface9 (struct IDirect3DSurface9 *surface);
 
 CAIRO_END_DECLS
 

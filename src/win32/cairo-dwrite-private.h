@@ -1,7 +1,7 @@
 /* -*- Mode: c; tab-width: 8; c-basic-offset: 4; indent-tabs-mode: t; -*- */
 /* Cairo - a vector graphics library with display and print output
  *
- * Copyright © 2010 Mozilla Foundation
+ * Copyright Â© 2010 Mozilla Foundation
  *
  * This library is free software; you can redistribute it and/or
  * modify it either under the terms of the GNU Lesser General Public
@@ -33,7 +33,7 @@
  * Contributor(s):
  *	Bas Schouten <bschouten@mozilla.com>
  */
-#include <dwrite_1.h>
+#include <dwrite_2.h>
 #include <d2d1.h>
 
 // DirectWrite is not available on all platforms.
