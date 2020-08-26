@@ -48,16 +48,6 @@ struct _cairo_dwrite_scaled_font {
     cairo_scaled_font_t base;
     cairo_matrix_t mat;
     cairo_matrix_t mat_inverse;
-    cairo_antialias_t antialias_mode;
-    DWRITE_MEASURING_MODE measuring_mode;
-    cairo_bool_t manual_show_glyphs_allowed;
-    enum TextRenderingState {
-        TEXT_RENDERING_UNINITIALIZED,
-        TEXT_RENDERING_NO_CLEARTYPE,
-        TEXT_RENDERING_NORMAL,
-        TEXT_RENDERING_GDI_CLASSIC
-    };
-    TextRenderingState rendering_mode;
 };
 typedef struct _cairo_dwrite_scaled_font cairo_dwrite_scaled_font_t;
 
@@ -108,71 +98,9 @@ public:
 	return family;
     }
 
-    static IDWriteRenderingParams *RenderingParams(cairo_dwrite_scaled_font_t::TextRenderingState mode)
-    {
-	if (!mDefaultRenderingParams ||
-            !mForceGDIClassicRenderingParams ||
-            !mCustomClearTypeRenderingParams)
-        {
-	    CreateRenderingParams();
-	}
-	IDWriteRenderingParams *params;
-        if (mode == cairo_dwrite_scaled_font_t::TEXT_RENDERING_NO_CLEARTYPE) {
-            params = mDefaultRenderingParams;
-        } else if (mode == cairo_dwrite_scaled_font_t::TEXT_RENDERING_GDI_CLASSIC && mRenderingMode < 0) {
-            params = mForceGDIClassicRenderingParams;
-        } else {
-            params = mCustomClearTypeRenderingParams;
-        }
-	if (params) {
-	    params->AddRef();
-	}
-	return params;
-    }
-
-    static void SetRenderingParams(FLOAT aGamma,
-				   FLOAT aEnhancedContrast,
-				   FLOAT aClearTypeLevel,
-				   int aPixelGeometry,
-				   int aRenderingMode)
-    {
-	mGamma = aGamma;
-	mEnhancedContrast = aEnhancedContrast;
-	mClearTypeLevel = aClearTypeLevel;
-        mPixelGeometry = aPixelGeometry;
-        mRenderingMode = aRenderingMode;
-	// discard any current RenderingParams objects
-	if (mCustomClearTypeRenderingParams) {
-	    mCustomClearTypeRenderingParams->Release();
-	    mCustomClearTypeRenderingParams = NULL;
-	}
-	if (mForceGDIClassicRenderingParams) {
-	    mForceGDIClassicRenderingParams->Release();
-	    mForceGDIClassicRenderingParams = NULL;
-	}
-	if (mDefaultRenderingParams) {
-	    mDefaultRenderingParams->Release();
-	    mDefaultRenderingParams = NULL;
-	}
-    }
-
-    static int GetClearTypeRenderingMode() {
-        return mRenderingMode;
-    }
-
 private:
-    static void CreateRenderingParams();
-
     static IDWriteFactory *mFactoryInstance;
     static IDWriteFontCollection *mSystemCollection;
-    static IDWriteRenderingParams *mDefaultRenderingParams;
-    static IDWriteRenderingParams *mCustomClearTypeRenderingParams;
-    static IDWriteRenderingParams *mForceGDIClassicRenderingParams;
-    static FLOAT mGamma;
-    static FLOAT mEnhancedContrast;
-    static FLOAT mClearTypeLevel;
-    static int mPixelGeometry;
-    static int mRenderingMode;
 };
 
 class AutoDWriteGlyphRun : public DWRITE_GLYPH_RUN
@@ -216,6 +144,8 @@ struct _cairo_dwrite_font_face {
     cairo_font_face_t base;
     IDWriteFont *font;
     IDWriteFontFace *dwriteface;
+    DWRITE_RENDERING_MODE rendering_mode;
+    IDWriteRenderingParams *rendering_params;
 };
 typedef struct _cairo_dwrite_font_face cairo_dwrite_font_face_t;
 
