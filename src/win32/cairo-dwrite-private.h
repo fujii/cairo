@@ -48,6 +48,7 @@ struct _cairo_dwrite_scaled_font {
     cairo_scaled_font_t base;
     cairo_matrix_t mat;
     cairo_matrix_t mat_inverse;
+    float design_units_per_em;
 };
 typedef struct _cairo_dwrite_scaled_font cairo_dwrite_scaled_font_t;
 

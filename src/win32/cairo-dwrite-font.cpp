@@ -126,6 +126,51 @@ IDWriteFontCollection *DWriteFactory::mSystemCollection = NULL;
 ID2D1Factory *D2DFactory::mFactoryInstance = NULL;
 ID2D1DCRenderTarget *D2DFactory::mRenderTarget = NULL;
 
+static ID2D1DCRenderTarget *
+_d2d_dc_render_target_argb()
+{
+    static ID2D1DCRenderTarget *render_target = NULL;
+    if (!render_target) {
+	if (!D2DFactory::Instance())
+	    return NULL;
+	// Create a DC render target.
+	D2D1_RENDER_TARGET_PROPERTIES props =
+	    D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+					 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+							   D2D1_ALPHA_MODE_PREMULTIPLIED),
+					 0, 0,
+					 D2D1_RENDER_TARGET_USAGE_NONE,
+					 D2D1_FEATURE_LEVEL_DEFAULT
+					 );
+
+	D2DFactory::Instance()->CreateDCRenderTarget(&props, &render_target);
+    }
+    return render_target;
+}
+
+static ID2D1DCRenderTarget *
+_d2d_dc_render_target_xrgb()
+{
+    static ID2D1DCRenderTarget *render_target = NULL;
+    if (!render_target) {
+	if (!D2DFactory::Instance())
+	    return NULL;
+	// Create a DC render target.
+	D2D1_RENDER_TARGET_PROPERTIES props =
+	    D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+					 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+							   D2D1_ALPHA_MODE_IGNORE),
+					 0, 0,
+					 D2D1_RENDER_TARGET_USAGE_NONE,
+					 D2D1_FEATURE_LEVEL_DEFAULT
+					 );
+
+	D2DFactory::Instance()->CreateDCRenderTarget(&props, &render_target);
+    }
+    return render_target;
+}
+
+
 /* Functions cairo_font_face_backend_t */
 static cairo_status_t
 _cairo_dwrite_font_face_create_for_toy (cairo_toy_font_face_t   *toy_face,
@@ -377,9 +422,12 @@ _cairo_dwrite_font_face_scaled_font_create (void			*abstract_face,
     } else
 	font_face->dwriteface->GetMetrics(&metrics);
 
-    extents.ascent = (FLOAT)metrics.ascent / metrics.designUnitsPerEm;
-    extents.descent = (FLOAT)metrics.descent / metrics.designUnitsPerEm;
-    extents.height = (FLOAT)(metrics.ascent + metrics.descent + metrics.lineGap) / metrics.designUnitsPerEm;
+    float design_units_per_em = metrics.designUnitsPerEm;
+    dwriteFont->design_units_per_em = design_units_per_em;
+
+    extents.ascent = metrics.ascent / design_units_per_em;
+    extents.descent = metrics.descent / design_units_per_em;
+    extents.height = (metrics.ascent + metrics.descent + metrics.lineGap) / design_units_per_em;
     extents.max_x_advance = 14.0;
     extents.max_y_advance = 0.0;
 
@@ -465,31 +513,30 @@ _cairo_dwrite_scaled_font_init_glyph_metrics(cairo_dwrite_scaled_font_t *scaled_
     cairo_text_extents_t extents;
 
     DWRITE_GLYPH_METRICS metrics;
-    DWRITE_FONT_METRICS fontMetrics;
     HRESULT hr;
     BOOL use_gdi_natural;
     if (_dwrite_scaled_font_uses_gdi (scaled_font, &use_gdi_natural)) {
 	DWRITE_MATRIX transform = _cairo_dwrite_matrix_from_matrix (&scaled_font->mat);
-	font_face->dwriteface->GetGdiCompatibleMetrics (1, 1, &transform, &fontMetrics);
 	hr = font_face->dwriteface->GetGdiCompatibleGlyphMetrics (1, 1, &transform, use_gdi_natural, &charIndex, 1, &metrics, FALSE);
-    } else {
-	font_face->dwriteface->GetMetrics(&fontMetrics);
+    } else
 	hr = font_face->dwriteface->GetDesignGlyphMetrics(&charIndex, 1, &metrics);
-    }
     if (FAILED(hr)) {
 	return CAIRO_INT_STATUS_UNSUPPORTED;
     }
 
+    float design_units_per_em = scaled_font->design_units_per_em;
+
+    INT32 glyph_width = metrics.advanceWidth - metrics.leftSideBearing - metrics.rightSideBearing;
+    INT32 glyph_height = metrics.advanceHeight - metrics.topSideBearing - metrics.bottomSideBearing;
+
     // TODO: Treat swap_xy.
-    extents.width = (FLOAT)(metrics.advanceWidth - metrics.leftSideBearing - metrics.rightSideBearing) /
-	fontMetrics.designUnitsPerEm;
-    extents.height = (FLOAT)(metrics.advanceHeight - metrics.topSideBearing - metrics.bottomSideBearing) /
-	fontMetrics.designUnitsPerEm;
-    extents.x_advance = (FLOAT)metrics.advanceWidth / fontMetrics.designUnitsPerEm;
-    extents.x_bearing = (FLOAT)metrics.leftSideBearing / fontMetrics.designUnitsPerEm;
+    extents.width = glyph_width < 0 ? 0 : glyph_width / design_units_per_em;
+    extents.height = glyph_height < 0 ? 0 : glyph_height / design_units_per_em;
+    extents.x_advance = metrics.advanceWidth / design_units_per_em;
+    extents.x_bearing = metrics.leftSideBearing / design_units_per_em;
     extents.y_advance = 0.0;
-    extents.y_bearing = (FLOAT)(metrics.topSideBearing - metrics.verticalOriginY) /
-	fontMetrics.designUnitsPerEm;
+    extents.y_bearing = (metrics.topSideBearing - metrics.verticalOriginY) /
+	design_units_per_em;
 
     // We pad the extents here because GetDesignGlyphMetrics returns "ideal" metrics
     // for the glyph outline, without accounting for hinting/gridfitting/antialiasing,
@@ -656,8 +703,8 @@ _cairo_dwrite_scaled_font_init_glyph_path(cairo_dwrite_scaled_font_t *scaled_fon
 }
 
 static cairo_int_status_t
-_clone_image_surface(cairo_format_t format,
-		     cairo_surface_t *surface,
+_compute_glyph_surface(cairo_format_t format,
+		     cairo_win32_surface_t *surface,
 		     cairo_rectangle_int_t *extents,
 		     cairo_image_surface_t **out_image)
 {
@@ -677,15 +724,48 @@ _clone_image_surface(cairo_format_t format,
 				     -extents->x,
 				     -extents->y);
 
-    _cairo_pattern_init_for_surface (&pattern, surface);
-    pattern.base.filter = CAIRO_FILTER_NEAREST;
+    if (surface->format == CAIRO_FORMAT_ARGB32) {
+	_cairo_pattern_init_for_surface (&pattern, &surface->base);
+	pattern.base.filter = CAIRO_FILTER_NEAREST;
 
-    status = _cairo_surface_paint (image,
-				   CAIRO_OPERATOR_SOURCE,
-				   &pattern.base,
-				   NULL);
+	status = _cairo_surface_paint (image,
+				       CAIRO_OPERATOR_SOURCE,
+				       &pattern.base,
+				       NULL);
 
-    _cairo_pattern_fini (&pattern.base);
+	_cairo_pattern_fini (&pattern.base);
+    } else {
+	cairo_image_surface_t *mask = (cairo_image_surface_t *)image;
+	cairo_image_surface_t *glyph = (cairo_image_surface_t *)cairo_surface_map_to_image (&surface->base, NULL);
+	if (unlikely (glyph->base.status))
+	    return (cairo_int_status_t)glyph->base.status;
+	if (format == CAIRO_FORMAT_ARGB32) {
+	    /* Duplicate the green channel of a 4-channel mask into the
+	     * alpha channel.
+	     */
+	    for (int i = 0; i < glyph->height; i++) {
+		uint32_t *p = (uint32_t *) (glyph->data + i * glyph->stride);
+		uint32_t *q = (uint32_t *) (mask->data + i * mask->stride);
+
+		for (int j = 0; j < glyph->width; j++) {
+		    *q++ = (*p & 0x00ffffff) | ((*p & 0x0000ff00) << 16);
+		    p++;
+		}
+	    }
+	} else {
+	    /* Compute an alpha-mask from a using the green channel of a
+	     * (presumed monochrome) RGB24 image.
+	     */
+	    for (int i = 0; i < glyph->height; i++) {
+		uint32_t *p = (uint32_t *) (glyph->data + i * glyph->stride);
+		uint8_t *q = (uint8_t *) (mask->data + i * mask->stride);
+
+		for (int j = 0; j < glyph->width; j++)
+		    *q++ = *p++ >> 8;
+	    }
+	}
+	cairo_surface_unmap_image (&surface->base, &glyph->base);
+    }
 
     *out_image = (cairo_image_surface_t *)image;
     return CAIRO_INT_STATUS_SUCCESS;
@@ -702,6 +782,30 @@ static DWRITE_MEASURING_MODE _dwrite_scaled_font_mesuaring_mode (cairo_dwrite_sc
     default:
 	return DWRITE_MEASURING_MODE_NATURAL;
     }
+}
+
+static D2D1_TEXT_ANTIALIAS_MODE _dwrite_scaled_font_antialias_mode (cairo_dwrite_scaled_font_t *scaled_font)
+{
+    switch (scaled_font->base.options.antialias) {
+    case CAIRO_ANTIALIAS_NONE:
+	return D2D1_TEXT_ANTIALIAS_MODE_ALIASED;
+    case CAIRO_ANTIALIAS_FAST:
+    case CAIRO_ANTIALIAS_GOOD:
+    case CAIRO_ANTIALIAS_GRAY:
+	return D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE;
+    case CAIRO_ANTIALIAS_BEST:
+    case CAIRO_ANTIALIAS_SUBPIXEL:
+	return D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE;
+    default:
+	break;
+    }
+    return D2D1_TEXT_ANTIALIAS_MODE_DEFAULT;
+}
+
+static cairo_bool_t _dwrite_scaled_font_can_subpixel_antialiased (cairo_dwrite_scaled_font_t *scaled_font)
+{
+    D2D1_TEXT_ANTIALIAS_MODE mode = _dwrite_scaled_font_antialias_mode (scaled_font);
+    return mode == D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE || mode == D2D1_TEXT_ANTIALIAS_MODE_DEFAULT;
 }
 
 static cairo_int_status_t 
@@ -733,15 +837,35 @@ _cairo_dwrite_scaled_font_init_glyph_surface(cairo_dwrite_scaled_font_t *scaled_
     DWRITE_GLYPH_OFFSET offset;
     double x = glyph.x;
     double y = glyph.y;
-    RECT area;
-    DWRITE_MATRIX matrix;
     cairo_rectangle_int_t extents = { 0, 0, width, height };
 
-    surface = cairo_win32_surface_create_with_dib (CAIRO_FORMAT_ARGB32,
+    run.glyphCount = 1;
+    run.glyphAdvances = &advance;
+    run.fontFace = ((cairo_dwrite_font_face_t*)scaled_font->base.font_face)->dwriteface;
+    run.fontEmSize = 1.0f;
+    run.bidiLevel = 0;
+    run.glyphIndices = &index;
+    run.isSideways = FALSE;
+    run.glyphOffsets = &offset;
+
+    cairo_bool_t isColor = FALSE;
+    {
+	DWRITE_MEASURING_MODE measureMode = _dwrite_scaled_font_mesuaring_mode(scaled_font);
+	RefPtr<IDWriteColorGlyphRunEnumerator> colorLayers;
+	RefPtr<IDWriteFactory2> factory2;
+	DWriteFactory::Instance()->QueryInterface(&factory2);
+	factory2->TranslateColorGlyphRun(0, 0, &run, nullptr, measureMode, nullptr, 0, &colorLayers);
+	if (colorLayers)
+	    isColor = TRUE;
+    }
+
+    surface = cairo_win32_surface_create_with_dib (isColor ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24,
 						   width, height);
 
+    const cairo_pattern_t *background = isColor ? &_cairo_pattern_clear.base : &_cairo_pattern_black.base;
+
     status = (cairo_int_status_t)_cairo_surface_paint (surface, CAIRO_OPERATOR_SOURCE,
-						       &_cairo_pattern_clear.base, NULL);
+						       background, NULL);
     if (status)
 	goto FAIL;
 
@@ -757,28 +881,25 @@ _cairo_dwrite_scaled_font_init_glyph_surface(cairo_dwrite_scaled_font_t *scaled_
     /** Y-axis is inverted */
     offset.ascenderOffset = -(FLOAT)y;
 
+    RECT area;
+    DWRITE_MATRIX matrix;
     area.top = 0;
     area.bottom = height;
     area.left = 0;
     area.right = width;
 
-    run.glyphCount = 1;
-    run.glyphAdvances = &advance;
-    run.fontFace = ((cairo_dwrite_font_face_t*)scaled_font->base.font_face)->dwriteface;
-    run.fontEmSize = 1.0f;
-    run.bidiLevel = 0;
-    run.glyphIndices = &index;
-    run.isSideways = FALSE;
-    run.glyphOffsets = &offset;
-
     matrix = _cairo_dwrite_matrix_from_matrix(&scaled_font->mat);
 
+    COLORREF text_color = isColor ? RGB(0, 0, 0) : RGB(255, 255, 255);
+
     status = _dwrite_draw_glyphs_to_gdi_surface_d2d (to_win32_surface (surface), &matrix, &run,
-						     RGB(0, 0, 0), scaled_font, area);
+						     text_color, scaled_font, area);
     if (status)
 	goto FAIL;
 
-    status = _clone_image_surface (CAIRO_FORMAT_A8, surface, &extents, &image);
+    cairo_bool_t monochrome = !_dwrite_scaled_font_can_subpixel_antialiased (scaled_font);
+    cairo_format_t format = isColor || monochrome ? CAIRO_FORMAT_A8 : CAIRO_FORMAT_ARGB32;
+    status = _compute_glyph_surface (format, to_win32_surface (surface), &extents, &image);
     if (status)
 	goto FAIL;
     cairo_surface_set_device_offset (&image->base, -x1, -y1);
@@ -786,18 +907,8 @@ _cairo_dwrite_scaled_font_init_glyph_surface(cairo_dwrite_scaled_font_t *scaled_
 				     &scaled_font->base,
 				     image);
 
-    cairo_bool_t isColor = FALSE;
-    {
-	DWRITE_MEASURING_MODE measureMode = _dwrite_scaled_font_mesuaring_mode(scaled_font);
-	RefPtr<IDWriteColorGlyphRunEnumerator> colorLayers;
-	RefPtr<IDWriteFactory2> factory2;
-	DWriteFactory::Instance()->QueryInterface(&factory2);
-	factory2->TranslateColorGlyphRun(0, 0, &run, nullptr, measureMode, nullptr, 0, &colorLayers);
-	if (colorLayers)
-	    isColor = TRUE;
-    }
     if (isColor) {
-	status = _clone_image_surface (CAIRO_FORMAT_ARGB32, surface, &extents, &image);
+	status = _compute_glyph_surface (CAIRO_FORMAT_ARGB32, to_win32_surface (surface), &extents, &image);
 	if (status)
 	    goto FAIL;
 	cairo_surface_set_device_offset (&image->base, -x1, -y1);
@@ -1023,14 +1134,19 @@ _dwrite_draw_glyphs_to_gdi_surface_d2d(cairo_win32_surface_t *surface,
 				       const RECT &area)
 {
     HRESULT rv;
-    ID2D1DCRenderTarget *rt = D2DFactory::RenderTarget();
 
+    cairo_bool_t is_color = surface->format == CAIRO_FORMAT_ARGB32;
+    ID2D1DCRenderTarget *rt = is_color ? _d2d_dc_render_target_argb() : _d2d_dc_render_target_xrgb();
+    
     // XXX don't we need to set RenderingParams on this RenderTarget?
 
     rv = rt->BindDC(surface->dc, &area);
 
     if (FAILED(rv))
 	return CAIRO_INT_STATUS_UNSUPPORTED;
+
+    if (!is_color)
+	rt->SetTextAntialiasMode (_dwrite_scaled_font_antialias_mode(scaled_font));
 
     D2D1_COLOR_F defalutColor = D2D1::ColorF(GetRValue(color), GetGValue(color), GetBValue(color), 1);
 
