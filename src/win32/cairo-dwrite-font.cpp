@@ -521,6 +521,8 @@ _cairo_dwrite_scaled_font_init_glyph_metrics(cairo_dwrite_scaled_font_t *scaled_
     } else
 	hr = font_face->dwriteface->GetDesignGlyphMetrics(&charIndex, 1, &metrics);
     if (FAILED(hr)) {
+	if (hr == E_INVALIDARG)
+	    return CAIRO_INT_STATUS_INVALID_MATRIX;
 	return CAIRO_INT_STATUS_UNSUPPORTED;
     }
 
@@ -1003,8 +1005,18 @@ cairo_dwrite_font_face_create_for_hfont (HFONT font)
     HRESULT hr = gdiInterop->CreateFontFaceFromHdc(hdc, &dwFace);
     SelectObject(hdc, oldFont);
     ReleaseDC(NULL, hdc);
+    if (SUCCEEDED(hr))
+        return cairo_dwrite_font_face_create_for_dwrite_font_face(dwFace);
+
+    LOGFONTW logfont;
+    GetObjectW (font, sizeof(logfont), &logfont);
+    RefPtr<IDWriteFont> dw_font;
+    hr = gdiInterop->CreateFontFromLOGFONT (&logfont, &dw_font);
     if (FAILED(hr))
-        return nullptr;
+	return NULL;
+    hr = dw_font->CreateFontFace(&dwFace);
+    if (FAILED(hr))
+	return NULL;
     return cairo_dwrite_font_face_create_for_dwrite_font_face(dwFace);
 }
 
